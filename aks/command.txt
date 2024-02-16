@@ -1,0 +1,82 @@
+// start docker images
+cd Shopping
+// start all images and containers in background mode
+// it enables the applications to run on the provided port
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d
+// stop containers but keep the images
+docker-compose -f docker-compose.yml -f docker-compose.override.yml down
+// delete container
+docker rm [container-id/container-name]
+// delete image
+docker rmi [image-id/image-name] -f
+
+// AZ Deployment
+
+// Install Azure CLI
+// Check Azure CLI Version
+az --version
+// Azure Login
+az login
+// Create Resource Group
+az group create --name kubeRG --location southindia
+// Create Azure Container Registry with Basic Plan in the Resource Group
+az acr create --resource-group kubeRG --name acrshopping --sku Basic
+// Enable Admin Access to the Container Registry
+az acr update --name acrshopping --admin-enabled true
+// Login into the container
+az acr login -n acrshopping
+// Verify docker images
+docker images
+// Verify login server name in the Azure Container Registry
+az acr list --resource-group kubeRG --query "[].{acrLoginServer:loginServer}"--output table
+// Tag docker images with the acr name
+docker tag shoppingapi:latest acrshopping.azurecr.io/shoppingapi:v1
+docker tag shoppingclient:latest acrshopping.azurecr.io/shoppingclient:v1
+// Push Images into the Azure Container Registry
+docker push acrshopping.azurecr.io/shoppingapi:v1
+docker push acrshopping.azurecr.io/shoppingclient:v1
+// Verify Repositories List on Azure Container Registry
+az acr repository list -n acrshopping --output table
+// Verify Tags For the repository
+az acr repository show-tags -n acrshopping --repository shoppingclient --output table
+
+// Deploy Azure Kubernetes Cluster for Azure Microservices
+// Create Azure AKS Cluster and Map it to the Container Registry
+az aks create --resource-group kubeRG --name aksshopping --node-count 1 --generate-ssh-keys --attach-acr acrshopping
+// Install AKS CLI
+az aks install-cli
+// Get AKS Credentials into Local Kubernetes
+az aks get-credentials --name aksshopping --resource-group kubeRG
+// View Contexts For Kubernetes in Local docker
+kubectl config get-contexts
+// Verify Kubernetes Nodes
+kubectl get nodes
+
+// Create Image Pull Secret For ACR Container
+// Get Parameter Details from Azure Container Registry -> Access Keys
+kubectl create secret docker-registry acr-secret --docker-server=acrshopping.azurecr.io --docker-username=acrshopping --docker-password=JlDTaXHUTRdnJPZ6/P4gFWDTOiGc3wJljnzUYKy2Xn+ACRAtOMu8 --docker-email=ashim.das1@gmail.com
+// Verify Secret in Azure Kubernetes
+kubectl get secret
+// Execute all the scripts in the aks directory 
+cd..
+kubectl apply -f .\aks\
+// Verify Services
+kubectl get svc
+// Verify Deployments
+kubectl get deployments
+// Add additional replicas to shoppingclient
+kubectl scale --replicas=1 deployment.apps/shoppingclient-deployment
+
+// Create Horizontal Scale (shoppingautoscale.yaml)
+// Get Horizontal Pods count
+kubectl get hpa
+
+// Get pods Detail
+kubectl get pods -o wide
+// Get pod Description
+kubectl describe pod [Pod-Number]
+// Get pod Detailed Logs
+kubectl logs [Pod-Number]
+
+// Zero downtime deployment for modification
+// Repeat the steps from docker-hub after modification to the applications and tag v2 image
